@@ -1,0 +1,8 @@
+const { param, validationResult } = require("express-validator");
+const validatorMiddleware = require("../../middlewares/validatorMiddleware");
+
+
+exports.createUserValidator = [
+    check('fname').notEmpty().withMessage('name is required')
+    .
+]
