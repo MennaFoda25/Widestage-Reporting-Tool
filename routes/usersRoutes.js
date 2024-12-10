@@ -1,5 +1,5 @@
 const express = require("express");
-
+const Authorized = require("../controllers/authController");
 const {
   createUserValidator,
   updateUserValidator,
@@ -18,14 +18,37 @@ const {
 
 const router = express.Router();
 
-router.route("/").post(createUserValidator, createUser).get(getUsers);
+router
+  .route("/")
+  .post(
+    Authorized.protect,
+    Authorized.allowedTo("admin"),
+    createUserValidator,
+    createUser
+  )
+  .get(Authorized.protect, Authorized.allowedTo("admin"), getUsers);
 
 router.put("/changePassword/:id", changePasswordValidator, changePassword);
 
 router
   .route("/:id")
-  .get(getUserValidator, getUser)
-  .delete(deleteUserValidator, deleteUser)
-  .put(updateUserValidator, updateUser);
+  .get(
+    Authorized.protect,
+    Authorized.allowedTo("admin"),
+    getUserValidator,
+    getUser
+  )
+  .delete(
+    Authorized.protect,
+    Authorized.allowedTo("admin"),
+    deleteUserValidator,
+    deleteUser
+  )
+  .put(
+    Authorized.protect,
+    Authorized.allowedTo("admin"),
+    updateUserValidator,
+    updateUser
+  );
 
 module.exports = router;

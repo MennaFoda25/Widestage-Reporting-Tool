@@ -1,3 +1,0 @@
-class ApiFeature {
-    constructor(mongooseQuery)
-}

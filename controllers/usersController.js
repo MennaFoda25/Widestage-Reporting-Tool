@@ -1,7 +1,6 @@
 const asyncHandler = require("express-async-handler");
 const { v4: uuidv4 } = require("uuid");
-const bcrypt = require("bcryptjs");
-
+const bcrypt = require('bcryptjs');
 const factory = require("../controllers/handlerFactory");
 const ApiError = require("../utils/apiError");
 const usersModel = require("../models/usersModel");
@@ -47,7 +46,8 @@ exports.changePassword = asyncHandler(async (req, res, next) => {
   const document = await usersModel.findByIdAndUpdate(
     req.params.id,
     {
-      password: await bcrypt.hash(req.body.password,12),
+      password: await bcrypt.hash(req.body.password, 12),
+      passwordChangedAt: Date.now(),
     },
     {
       new: true,

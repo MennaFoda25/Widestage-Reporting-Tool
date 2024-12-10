@@ -1,12 +1,26 @@
 const { check, body } = require("express-validator");
 const validatorMiddleware = require("../../middlewares/validatorMiddleware");
 const Users = require("../../models/usersModel");
+const bcrypt = require('bcryptjs');
+
 
 exports.createUserValidator = [
   check("firstName").notEmpty().withMessage("name is required"),
 
   check("lastName").notEmpty().withMessage("name is required"),
 
+  check('email')
+  .notEmpty()
+  .withMessage('Email required')
+  .isEmail()
+  .withMessage('Invalid email address')
+  .custom((val) =>
+    Users.findOne({ email: val }).then((user) => {
+      if (user) {
+        return Promise.reject(new Error('E-mail already in user'));
+      }
+    })
+  ),
   check("password")
     .notEmpty()
     .withMessage("password is required")
@@ -23,19 +37,6 @@ exports.createUserValidator = [
     .notEmpty()
     .withMessage("password confirmation needed"),
 
-  check("email")
-    .notEmpty()
-    .withMessage("Email is required")
-    .isEmail()
-    .withMessage("Invalid email address")
-    .custom((val) =>
-      Users.findOne({ email: val }).then((user) => {
-        if (user) {
-          return Promise.reject(new Error("Email is already in use"));
-        }
-      })
-    ),
-
   check("roles").optional(),
 
   validatorMiddleware,
@@ -48,6 +49,18 @@ exports.getUserValidator = [
 
 exports.updateUserValidator = [
   check("id").isMongoId().withMessage("Invalid Id"),
+  check("email")
+  .notEmpty()
+  .withMessage("Please enter your email")
+  .isEmail()
+  .withMessage("Invalid Email Format")
+  .custom((val) => {
+    Users.findOne({ email: val }).then((user) => {
+      if (user) {
+        return Promise.reject(new Error("Email already in use"));
+      }
+    });
+  }),
   validatorMiddleware,
 ];
 
@@ -73,11 +86,14 @@ exports.changePasswordValidator = [
       if (!isCorrectPassword) {
         throw new Error("Password does not match");
       }
+      if (val !== req.body.passwordConfirm) {
+        throw new Error("Password CTonfirmation is incorrect ");
+      }
+      return true;
     }),
 
   validatorMiddleware,
 ];
-
 
 exports.deleteUserValidator = [
   check("id").isMongoId().withMessage("Invalid Id"),
