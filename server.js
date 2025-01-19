@@ -19,7 +19,7 @@ dotenv.config({ path: "config.env" });
 const dbConnection = require("./config/database");
 const usersRoutes = require("./routes/usersRoutes");
 const authRoutes = require("./routes/authRoutes");
-const motawrenRoutes = require('./routes/motawrenRoutes')
+const dataRoutes = require("./routes/mongoRoutes");
 
 dbConnection();
 
@@ -128,7 +128,7 @@ if (process.env.NODE_ENV === "development") {
 //Mount Routes
 app.use("/widestage/v1/users", usersRoutes);
 app.use("/widestage/v1/auth", authRoutes);
-app.use("/widestage/v1/motawren", motawrenRoutes)
+app.use("/widestage/v1/data", dataRoutes);
 
 app.all("*", (req, res, next) => {
   //create error and send it to error handling middleware

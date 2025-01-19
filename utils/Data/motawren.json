@@ -1,0 +1,36 @@
+[
+  {
+    "_id": "6390f4b2bf11cf1bc42d8f69",
+    "className": "com.si.model.CommunicationParameters",
+    "active": false,
+    "port": "/dev/ttyS0",
+    "baudRate": 2400,
+    "ackTimeout": 500,
+    "parity": "N",
+    "stopBit": 1,
+    "dataBitsSize": 8,
+    "linkAddSize": 1,
+    "mode": 0,
+    "ca": "2",
+    "ioa": "3",
+    "cot": "2",
+    "originatorAddress": "0"
+  },
+  {
+    "_id": "6390f537bf11cf1bc42d8f6a",
+    "className": "com.si.model.CommunicationParameters",
+    "active": false,
+    "port": "/dev/ttyS0",
+    "baudRate": 2400,
+    "ackTimeout": 500,
+    "parity": "N",
+    "stopBit": 1,
+    "dataBitsSize": 8,
+    "linkAddSize": 1,
+    "mode": 0,
+    "ca": "2",
+    "ioa": "3",
+    "cot": "2",
+    "originatorAddress": "0"
+  }
+]
