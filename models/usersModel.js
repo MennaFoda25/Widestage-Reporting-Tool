@@ -21,6 +21,9 @@ const usersSchema = new mongoose.Schema(
       minLength: [3, "Password is too short"],
     },
     passwordChangedAt: Date,
+    passwordResetCode: String,
+    passwordResetExpires: Date,
+    passwordResetVerified: Boolean,
     companyID: String,
     status: String,
     email: {

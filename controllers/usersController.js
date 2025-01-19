@@ -1,6 +1,7 @@
+const jwt = require("jsonwebtoken");
 const asyncHandler = require("express-async-handler");
 const { v4: uuidv4 } = require("uuid");
-const bcrypt = require('bcryptjs');
+const bcrypt = require("bcryptjs");
 const factory = require("../controllers/handlerFactory");
 const ApiError = require("../utils/apiError");
 const usersModel = require("../models/usersModel");
@@ -28,7 +29,7 @@ exports.updateUser = asyncHandler(async (req, res, next) => {
     req.params.id,
     {
       firstName: req.body.firstName,
-      laststName: req.body.laststName,
+      lastName: req.body.lastName,
       email: req.body.email,
       roles: req.body.roles,
     },
@@ -63,91 +64,57 @@ exports.changePassword = asyncHandler(async (req, res, next) => {
 //@access private
 exports.deleteUser = factory.deleteOne(usersModel);
 
-// exports.UsersCreate = async function (req, res, next) {
-//   try {
-//     req.query.trash = true;
-//     req.query.companyid = true;
-//     req.body.companyID = "COMPID"; // Assign company ID directly
 
-//     // Handle password generation if requested
-//     let thePassword;
-//     if (req.body.sendPassword === true) {
-//       const generatePassword = require("password-generator");
-//       thePassword = generatePassword();
-//       req.body.pwd1 = thePassword;
-//       req.body.userPassword = thePassword;
-//     }
+//@desc  get logged user data
+//@route GET /widestage/v1/users/updateMyPassword
+//@access private/protect
+exports.getLoggedUserData = asyncHandler(async (req, res, next) => {
+  req.params.id = req.user._id;
+  next();
+});
 
-//     // Set default fields for the user
-//     req.body.status = "active";
-//     req.body.nd_trash_deleted = false;
+//@desc  update logged user password
+//@route PUT /widestage/v1/users/updateMyPassword
+//@access private/protect
+exports.updateLoggedUserPassword = asyncHandler(async (req, res, next) => {
+  //1)update user password based on user payload 
+  const user = await usersModel.findByIdAndUpdate(
+    req.user._id,
+    {
+      password: await bcrypt.hash(req.body.password, 12),
+      passwordChangedAt: Date.now(),
+    },
+    {
+      new: true,
+    }
+  );
 
-//     // Create user data object for insertion
-//     const data = req.body;
+  const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET_KEY, {
+    expiresIn: process.env.JWT_EXPIRY_TIME,
+  });
 
-//     // Set createdBy and createdOn based on authenticated user
-//     if (req.query.userid) {
-//       data.createdBy = req.isAuthenticated() ? req.user._id : null;
-//       data.createdOn = new Date();
-//     }
+  res.status(200).json({data: user , token})
+});
 
-//     // Set companyID from authenticated user
-//     if (req.query.companyid) {
-//       data.companyID = req.isAuthenticated() ? req.user.companyID : null;
-//     }
+exports.updateLoggedUserData = asyncHandler(async (req, res, next) => {
+  const updatedUser = await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      firstName: req.body.firstName,
+      laststName: req.body.lastName,
+      email: req.body.email
+    },
+    { new: true }
+  );
 
-//     // Handle trash condition
-//     if (req.query.trash) {
-//       data.nd_trash_deleted = false;
-//     }
+  res.status(200).json({ data: updatedUser });
+});
 
-//     // User tracking information
-//     const user = req.isAuthenticated() ? req.user.username : "unsigned user";
-//     if (!data.nd_history) {
-//       data.nd_history = [];
-//     }
+// @desc    Deactivate logged user
+// @route   DELETE /api/v1/users/deleteMe
+// @access  Private/Protect
+exports.deleteLoggedUserData = asyncHandler(async (req, res, next) => {
+  await User.findByIdAndUpdate(req.user._id, { active: false });
 
-//     // Add creation details to nd_history
-//     data.nd_history.push({
-//       text: `Created on ${new Date()} by ${user}`,
-//       user_id: req.isAuthenticated() ? req.user._id : null,
-//       user_name: req.isAuthenticated() ? req.user.username : null,
-//       user_companyID: req.isAuthenticated() ? req.user.companyID : null,
-//       user_companyName: req.isAuthenticated() ? req.user.companyName : null,
-//     });
-
-//     // Create the user using the model
-//     const Users = connection.model("Users");
-//     const result = await Users.create(data);
-
-//     // Handle sending password email if required
-//     if (req.body.sendPassword === true && thePassword) {
-//       const recipients = [];
-//       recipients.push(req.body);
-//       sendEmailTemplate(
-//         "newUserAndPassword",
-//         recipients,
-//         "email",
-//         "welcome to widestage"
-//       );
-//     }
-
-//     // Successfully respond with created item
-//     return serverResponse(req, res, 200, {
-//       result: 1,
-//       msg: "Item created",
-//       item: result.toObject(),
-//     });
-//   } catch (err) {
-//     // Pass errors to the next middleware
-//     return next(new ApiError(err.message, 500));
-//   }
-// };
-
-// exports.UsersDelete = function (req, res) {
-//   req.query.trash = true;
-
-//   controller.delete(req, function (result) {
-//     serverResponse(req, res, 200, result);
-//   });
-// };
+  res.status(204).json({ status: 'Success' });
+});
