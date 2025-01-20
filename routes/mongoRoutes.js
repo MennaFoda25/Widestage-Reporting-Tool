@@ -3,7 +3,7 @@ const {
   connectToDatabase,
   queryCollection,
   extractSchema,
-} = require("../config/mongodb");
+} = require("../controllers/mongoController");
 const router = express.Router();
 
 // Database connection route

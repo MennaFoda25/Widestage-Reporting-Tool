@@ -1,128 +1,174 @@
-const DataModel = require("../models/mongoModel");
-const generateFindFields = require("../utils/generateDataResource");
-const asyncHandler = require("express-async-handler");
+const { MongoClient } = require("mongodb");
+const { Parser } = require("json2csv");
+const fs = require("fs");
+const Reports = require("../models/reportsModel");
+const path = require("path");
 const ApiError = require("../utils/apiError");
-const ApiFeatures = require("../utils/apiFeatures");
-const slugify = require("slugify");
-const { Model } = require("mongoose");
-const factory = require("../controllers/handlerFactory");
+const asyncHandler = require("express-async-handler");
 
-class Controller {
-  constructor(model) {
-    this.model = model;
-  }
+const generateReport = (documents) => {
+  const report = {
+    totalRecords: documents.length,
+    sampleData: document.onvisibilitychange(0, 5),
+  };
+  return report;
+};
 
-  findAll(req, res) {
-    const features = new ApiFeatures(this.model.find(), req.query)
-      .filter()
-      .sort()
-      .limitFields();
+// Query documents from a collection
+const queryCollection = async (req, res) => {
+  const {
+    connectionString,
+    dbName,
+    collectionName,
+    query,
+    reportFormat = "json",
+    reportName,
+    createdBy,
+    companyId,
+  } = req.body;
 
-    const items = features.mongooseQuery;
-    const countDocuments = this.model.countDocuments();
-
-    features.paginate(countDocuments);
-
-    res.json({
-      result: 1,
-      pagination: features.paginationResult,
-      items,
+  if (!connectionString || !dbName || !collectionName) {
+    return res.status(400).json({
+      message:
+        "Connection string, database name, and collection name are required",
     });
   }
 
-  findOne(req, res) {
-    const id = req.query.id;
-    if (!id) {
-      return res.status(400).json({ result: 0, msg: "id is required" });
-    }
-
-    const find = this.generateFindFields(req, id);
-    const item = this.model.findOne(find);
-
-    if (!item) {
-      return res.status(400).json({ result: 0, msg: "Item not found" });
-    }
-
-    res.json({ result: 1, item: item.toObject() });
+  if (!reportName || !createdBy) {
+    return res
+      .status(400)
+      .json({ message: "Report name, createdBy are required" });
   }
 
-  update(req, res) {
-    const data = req.body;
-    const id = data._id;
-
-    if (!id) {
-      return res.status(400).json({ result: 0, msg: "'id' is required." });
-    }
-
-    const find = this.generateFindFields(req, id);
-    delete data._id;
-
-    data.nd_history = data.nd_history || [];
-    data.nd_history.push({
-      text: `Updated on ${new Date()}`,
-      user_id: req.user ? req.user._id : null,
+  try {
+    const client = new MongoClient(connectionString, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
     });
+    await client.connect();
 
-    const result = this.model.update(find, { $set: data });
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
 
-    if (result.nMoodified > 0) {
-      res.json({ result: 1, msg: `${result.nMoodified} recod(s) updated` });
+    // Execute the query (if provided)
+    const documents = query
+      ? await collection.find(query).toArray()
+      : await collection.find({}).toArray();
+
+    // Generate a report
+    let reportPath;
+    if (reportFormat === "csv") {
+      // Generate CSV report
+      const json2csvParser = new Parser();
+      const csv = json2csvParser.parse(documents);
+      reportPath = path.join(
+        __dirname,
+        "../reports",
+        `report_${Date.now()}.csv`
+      );
+      fs.writeFileSync(reportPath, csv);
     } else {
-      res.json({ result: 0, msg: "no record updated" });
+      // Default to JSON report
+      reportPath = path.join(
+        __dirname,
+        "../reports",
+        `report_${Date.now()}.json`
+      );
+      fs.writeFileSync(reportPath, JSON.stringify(documents, null, 2));
     }
-  }
 
-  generateMandatoryFilters(req) {
-    const mandatoryFilters = [];
-
-    if (req.query.trash) {
-      mandatoryFilters.push({ nd_trash_deleted: false });
-    }
-    if (req.user) {
-      mandatoryFilters.push({ companyID: req.user.companyID });
-    }
-    return mandatoryFilters;
-  }
-
-  prepareCreateData(data, req) {
-    if (req.user) {
-      data.createdBy = req.user._id;
-      data.createdOn = new Date();
-    }
-    data.nd_trash_deleted = false;
-    data.nd_history = data.nd_history || [];
-    data.nd_history.push({
-      text: `Created on ${new Date()} by ${req.user.username || "unsigned user"}`,
-      user_id: req.user ? req.user._id : null,
+    const report = new Reports({
+      companyID: companyId, // Company ID
+      reportName: reportName, // Report name
+      reportType: "database", // Report type
+      reportDescription: "Report generated from database query", // Report description
+      reportSubType: reportFormat, // Report subtype (json or csv)
+      properties: {}, // Additional properties
+      query: query || {}, // Query used to generate the report
+      owner: createdBy, // Owner of the report
+      createdBy: createdBy, // Creator of the report
+      createdOn: new Date(), // Creation timestamp
+      history: [], // History of changes
+      parentFolder: "reports", // Parent folder
+      isPublic: false, // Whether the report is public
+      nd_trash_deleted: false, // Whether the report is deleted
+      nd_trash_deleted_date: null, // Deletion timestamp
+      selectedLayerID: "layer-id", // Selected layer ID
+      filePath: reportPath.replace(__dirname, ""), // Path to the report file
     });
-    return data;
+    await report.save();
+
+    res.status(200).json({
+      message: "Query executed successfully",
+      reportPath: reportPath.replace(__dirname, ""), // Return a relative path
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to query collection", error: error.message });
   }
-  generateFindFields(req, id) {
-    const mandatoryFilters = [{ _id: id }];
-    const filters = this.generateMandatoryFilters(req);
-    return { $and: [...mandatoryFilters, ...filters] };
+};
+
+//extract schema from a collection
+const extractSchema = asyncHandler(async (req, res) => {
+  const { connectionString, dbName, collectionName } = req.body;
+
+  if (!connectionString || !dbName || !collectionName) {
+    return res.status(400).json({
+      message:
+        "Connection string, database name and collection name are required",
+    });
   }
-}
-module.exports = Controller;
 
-//exports.getAll = factory.getAll(Model);
-// (Model, modelName = "") =>
-//   asyncHandler(async (req, res) => {
-//     let filter = req.filterObj || {};
-//     const documentsCounts = await Model.countDocuments();
-//     const apiFeatures = new ApiFeatures(Model.find(filter), req.query)
-//       .paginate(documentsCounts)
-//       .filter()
-//       .search(modelName)
-//       .limitFields()
-//       .sort();
+  try {
+    const client = new MongoClient(connectionString, { useNewUrlParser: true });
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
 
-//     const { mongooseQuery, paginationResult } = apiFeatures;
-//     const documents = await mongooseQuery;
+    //fetch a sample document from the collection
+    const sampleDocument = await collection.findOne({});
 
-//     res.status(200).json({
-//       results: documents.length,
-//       paginationResult,
-//       data: documents,
-//     });
-//   });
+    if (!sampleDocument) {
+      return next(new ApiError(` No documents found in the collection`));
+    }
+
+    //extract schema from the sample document
+    const schema = Object.keys(sampleDocument).reduce((acc, key) => {
+      acc[key] = typeof sampleDocument[key]; //get datatype of each field
+      return acc;
+    }, {});
+    res.status(200).json({ message: "Schema extracted successfully", schema });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to extract schema", error: error.message });
+  }
+});
+//connect to an external mongodb database
+const connectToDatabase = asyncHandler(async (req, res) => {
+  const { connectionString, dbName } = req.body;
+  if (!connectionString || !dbName) {
+    return next(
+      new ApiError(`Connection string and database name are required`, 404)
+    );
+  }
+
+  try {
+    const client = new MongoClient(connectionString, {
+      useNewUrlParser: true,
+    });
+    await client.connect();
+
+    const db = client.db(dbName);
+    const collections = await db.listCollections().toArray();
+
+    res.status(200).json({ message: "Connected to database", collections });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to connect to database", error: error.message });
+  }
+});
+
+module.exports = { connectToDatabase, queryCollection, extractSchema };

@@ -1,0 +1,17 @@
+[
+  {
+    "_id": "674d55ce2a4c5ca681a50abb",
+    "firstName": "Menna",
+    "lastName": "Foda",
+    "password": "1113333",
+    "companyID": "1234",
+    "email": "menna@gmail.com",
+    "roles": "admin",
+    "filters": [],
+    "contextHelp": [],
+    "dialogs": [],
+    "privateSpace": [],
+    "startDate": "2024-12-02T06:38:06.510Z",
+    "__v": 0
+  }
+]
