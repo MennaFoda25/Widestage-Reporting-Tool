@@ -20,6 +20,8 @@ const dbConnection = require("./config/database");
 const usersRoutes = require("./routes/usersRoutes");
 const authRoutes = require("./routes/authRoutes");
 const dataRoutes = require("./routes/mongoRoutes");
+const fileRoutes = require("./routes/fileRoutes");
+const mongoRoutes = require("./routes/mongoRoutes");
 
 dbConnection();
 
@@ -119,6 +121,7 @@ const app = express();
 
 //
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
@@ -129,6 +132,8 @@ if (process.env.NODE_ENV === "development") {
 app.use("/widestage/v1/users", usersRoutes);
 app.use("/widestage/v1/auth", authRoutes);
 app.use("/widestage/v1/data", dataRoutes);
+app.use("/widestage/v1/files", fileRoutes);
+app.use("/widestage/v1/db", mongoRoutes);
 
 app.all("*", (req, res, next) => {
   //create error and send it to error handling middleware

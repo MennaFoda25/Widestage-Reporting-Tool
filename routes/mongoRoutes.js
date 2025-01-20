@@ -1,9 +1,17 @@
 const express = require("express");
-const { getAll } = require("../controllers/mongoController");
-const { Model } = require("mongoose");
-
+const {
+  connectToDatabase,
+  queryCollection,
+  extractSchema,
+} = require("../config/mongodb");
 const router = express.Router();
 
-router.get("/", getAll);
+// Database connection route
+router.post("/connect", connectToDatabase);
 
+// Query collection route
+router.post("/query", queryCollection);
+
+// Extract schema route
+router.post("/schema", extractSchema);
 module.exports = router;

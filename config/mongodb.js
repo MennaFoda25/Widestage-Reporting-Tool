@@ -1,209 +1,121 @@
-const mongoose = require("mongoose");
-const MongoClient = require("mongodb").MongoClient;
-const assert = require("assert"); //used for writing test assertions
-const uuid = require("node-uuid");
-const moment = require("moment"); //used for parsing, validating, manipulating, and displaying dates and times
-const numeral = require("numeral"); // used for formatting currency and other numerical
+const { MongoClient } = require("mongodb");
+const { Parser } = require("json2csv");
+const fs = require("fs");
+const path = require("path");
 const ApiError = require("../utils/apiError");
+const asyncHandler = require("express-async-handler");
 
-//constructs the MongoDB connection URI based on the provided data
-const dbURI = (data) => {
-  const { userName, password, host, port, database } = data;
-  return userName
-    ? `mongodb://${userName}:${password}@${host}:${port}/${database}`
-    : `mongodb://${host}:${port}/${database}`;
+const generateReport = (documents) => {
+  const report = {
+    totalRecords: documents.length,
+    sampleData: document.onvisibilitychange(0, 5),
+  };
+  return report;
 };
 
-const handleConnectionError = (err, done) => {
-  console.error("Mongoose connection error:", err);
-  done(new ApiError(`Bad Connection ${err}`, 400));
-};
+// Query documents from a collection
+const queryCollection = async (req, res) => {
+  const { connectionString, dbName, collectionName, query, reportFormat = 'json' } = req.body;
 
-const handleConnectionSuccess = (conn, done) => {
-  console.log("Database Connected, getting collections names");
-  conn.db.listCollections().toArray((err, names) => {
-    if (err) {
-      console.error(err);
-      done({ result: 0, msg: err });
+  if (!connectionString || !dbName || !collectionName) {
+    return res.status(400).json({ message: 'Connection string, database name, and collection name are required' });
+  }
+
+  try {
+    const client = new MongoClient(connectionString, { useNewUrlParser: true, useUnifiedTopology: true });
+    await client.connect();
+
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
+
+    // Execute the query (if provided)
+    const documents = query ? await collection.find(query).toArray() : await collection.find({}).toArray();
+
+    // Generate a report
+    let reportPath;
+    if (reportFormat === 'csv') {
+      // Generate CSV report
+      const json2csvParser = new Parser();
+      const csv = json2csvParser.parse(documents);
+      reportPath = path.join(__dirname, '../reports', `report_${Date.now()}.csv`);
+      fs.writeFileSync(reportPath, csv);
     } else {
-      done({ result: 1, items: names });
-    }
-    conn.close();
-  });
-};
-
-exports.testConnection = (req, data, done) => {
-  const URI = dbURI(data);
-  const conn = mongoose.createConnection(URI, { server: { poolSize: 5 } });
-
-  conn.on("connected", () => handleConnectionSuccess(conn, done));
-  conn.on("error", (err) => handleConnectionError(err, done));
-};
-
-//Connects to the database to fetch the schemas of specified collections.
-//  It uses a nested function call getCollectionSchemas to populate the schemas
-exports.getSchemas = (data, done) => {
-  const URI = dbURI(data);
-  MongoClient.connect(dbURI, (err, db) => {
-    if (err) {
-      console.error(err);
-      return done({ result: 0, msg: err });
+      // Default to JSON report
+      reportPath = path.join(__dirname, '../reports', `report_${Date.now()}.json`);
+      fs.writeFileSync(reportPath, JSON.stringify(documents, null, 2));
     }
 
-    const schemas = [];
-    getCollctionSchemas(db, data.entities, schemas, () => {
-      done({ result: 1, items: schemas });
+    res.status(200).json({
+      message: 'Query executed successfully',
+      reportPath: reportPath.replace(__dirname, ''), // Return a relative path
     });
-  });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to query collection', error: error.message });
+  }
 };
 
-//Recursively fetches and constructs schemas for the collections. It limits to 100 documents per collection,
-//  using extractElements to get fields from the results
-const getCollctionSchemas = (db, collections, schemas, done, index = 0) => {
-  if (!collections[index]) {
-    return done();
-  }
 
-  const collectionName = collections[index].name;
-  const collection = db.collection(collectionName);
 
-  collection
-    .find()
-    .limit(100)
-    .toArray((err, results) => {
-      const elements = extractElements(results);
-      const schema = {
-        collectionsId: `WST${uuid.v4().replace(/-/g, " ")}`,
-        collectionName,
-        visible: true,
-        collectionsLabel: collectionName,
-        elements,
-      };
-      schemas.push(schema);
-      getCollectionSchemas(db, collections, schemas, done, (index = 1));
+//extract schema from a collection
+const extractSchema = asyncHandler(async (req, res) => {
+  const { connectionString, dbName, collectionName } = req.body;
+
+  if (!connectionString || !dbName || !collectionName) {
+    return res.status(400).json({
+      message:
+        "Connection string, database name and collection name are required",
     });
-};
-
-const extractElements = (result) => {
-  const elements = new Set();
-  results.forEach((result) => {
-    getElementList(result, elements);
-  });
-
-  return Array.from(elements)
-    .map((str) => {
-      if (str) {
-        const [name, type] = str.split(":");
-        if (name && !["_id._bsontype", "_id.id", "__v"].includes(name)) {
-          return {
-            elementId: uuid.v4(),
-            elementName: name,
-            elementType: type,
-            visible: type !== "object",
-            elementLabel: name,
-          };
-        }
-      }
-      return null;
-    })
-    .filter(Boolean);
-};
-
-const getElementList = (target, elements, parents = " ") => {
-  for (let key in target) {
-    if (typeof target[key] !== "object") {
-      elements.add(`${parent ? parent + "." : ""}${key}:${typeof target[key]}`);
-    } else {
-      getElementList(target[key], elements, parent ? `${parent}.${key}` : key);
-    }
   }
-};
 
-exports.execOperation = (operation, params, done) => {
-  const DataSources = connection.model("DataSources");
+  try {
+    const client = new MongoClient(connectionString, { useNewUrlParser: true });
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
 
-  DataSources.findOne({ _id: params.datasourceID }, (err, datasource) => {
-    if (err || !datasource) {
-      return done({ result: 0, mesg: "Datasource not found" });
+    //fetch a sample document from the collection
+    const sampleDocument = await collection.findOne({});
+
+    if (!sampleDocument) {
+      return next(new ApiError(` No documents found in the collection`));
     }
 
-    const URI = dbURI(datasource.params[0].connection);
-    MongoClient.connect(URI, (err, db) => {
-      if (err) {
-        return console.error(err);
-      }
+    //extract schema from the sample document
+    const schema = Object.keys(sampleDocument).reduce((acc, key) => {
+      acc[key] = typeof sampleDocument[key]; //get datatype of each field
+      return acc;
+    }, {});
+    res.status(200).json({ message: "Schema extracted successfully", schema });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to extract schema", error: error.message });
+  }
+});
+//connect to an external mongodb database
+const connectToDatabase = asyncHandler(async (req, res) => {
+  const { connectionString, dbName } = req.body;
+  if (!connectionString || !dbName) {
+    return next(
+      new ApiError(`Connection string and database name are required`, 404)
+    );
+  }
 
-      const collection = db.collection(params.collectionName);
-      const fields = (params.fields || []).reduce((acc, field) => {
-        acc[field] = 1;
-        return acc;
-      });
-
-      const operations = {
-        find: () =>
-          collection
-            .find({}, fields)
-            .limit(50)
-            .toArray((err, items) => {
-              db.close();
-              done({ result: 1, items });
-            }),
-        aggregate: () => {
-          collection
-            .aggregate([
-              { $group: { _id: paramss.group } },
-              { $sort: params.sort },
-              { $limit: 50 },
-            ])
-            .toArray((err, result) => {
-              db.close();
-              done({ result: 1, items: result });
-            });
-        },
-      };
-      if (operations[operation]) {
-        operation[operation]();
-      } else {
-        db.close();
-        done({ result: 0, msg: "Invalid operation" });
-      }
+  try {
+    const client = new MongoClient(connectionString, {
+      useNewUrlParser: true,
     });
-  });
-};
+    await client.connect();
 
-exports.processCollections = (
-  req,
-  query,
-  collections,
-  datasource,
-  params,
-  thereAreJoins,
-  done
-) => {
-  processNextCollection(
-    req,
-    query,
-    collections,
-    datasource,
-    params,
-    thereAreJoins,
-    done
-  );
-};
-const processNextCollection = (
-  req,
-  query,
-  collections,
-  datasource,
-  params,
-  thereAreJoins,
-  done,
-  index = 0
-) => {
-  if (!collections[index]) {
-    return done();
+    const db = client.db(dbName);
+    const collections = await db.listCollections().toArray();
+
+    res.status(200).json({ message: "Connected to database", collections });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to connect to database", error: error.message });
   }
-  if (thereAreJoins && params.page > 1) {
-    return done();
-  }
-};
+});
+
+module.exports = { connectToDatabase, queryCollection, extractSchema };

@@ -1,0 +1,17 @@
+[
+  {
+    "_id": "67583a15a1ddd00512841ea5",
+    "firstName": "menna",
+    "lastName": "ngg33",
+    "password": "$2a$12$RradDD.e1HSp5x9uBKPliui93t2lP5Z8kYwrqfH87m6I/AwdwcB36",
+    "email": "mena.foda2000@gmail.com",
+    "roles": "user",
+    "active": true,
+    "filters": [],
+    "contextHelp": [],
+    "dialogs": [],
+    "privateSpace": [],
+    "startDate": "2024-12-10T12:54:45.752Z",
+    "__v": 0
+  }
+]
